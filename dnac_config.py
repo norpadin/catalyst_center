@@ -8,7 +8,7 @@
     SUBDIR >> Directorio donde se bajan los running config
 '''
 
-USER = 'admin'
+USERNAME = 'admin'
 PASSWORD = 'BvsTv3965!'
-DNAC = '10.1.100.10'
+BASE_URL = r'https://10.1.100.10'
 SUBDIR = 'configurations/'
