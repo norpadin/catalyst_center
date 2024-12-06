@@ -54,15 +54,15 @@ class TQDMStreamHandler(logging.StreamHandler):
 class Dnac():
     def __init__(self,  dnac_ip, dnac_user, dnac_password) -> None:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        self.dnac_user = dnac_user
-        self.dnac_password = dnac_password
+        self.dnac_user: str = dnac_user
+        self.dnac_password: str = dnac_password
         self.dnac_ip: str = dnac_ip
         self.base_url: str = f"https://{dnac_ip}"
-        self.auth_url = r'/dna/system/api/v1/auth/token'
-        self.devices = {}
-        self.sites = []
-        self.groups = []
-        self.dev_groups = []
+        self.auth_url: str = r'/dna/system/api/v1/auth/token'
+        self.devices: dict = {}
+        self.sites: list = []
+        self.groups: list = []
+        self.dev_groups: list = []
 
     def __repr__(self) -> str:
         return (f"Dnac(dnac_ip='{self.dnac_ip}', "
@@ -92,7 +92,7 @@ class Dnac():
             return None
 
     def get_all_devices(self) -> dict | None:
-        url:str = self.base_url + '/dna/intent/api/v1/network-device'
+        url:str = self.base_url + r'/dna/intent/api/v1/network-device'
         try:
             response: requests.Response = requests.get(
                 url,
@@ -111,12 +111,12 @@ class Dnac():
             return None
 
     def get_devices_by_platfom(self, type) -> list[str] | None:
-        url: str = self.base_url + '/dna/intent/api/v1/network-device'
+        url: str = self.base_url + r'/dna/intent/api/v1/network-device'
         self.devices_by_platform: list = []
         self.type: str = type
         self.query_string_params: dict = {'platformId': self.type}
         try:
-            response = requests.get(
+            response: requests.Response = requests.get(
                 url,
                 headers={
                     'X-Auth-Token': self.get_token(),
@@ -148,7 +148,7 @@ class Dnac():
             logger.error(f"Error getting device info: {e}")
             return None
 
-    def send_commands(sekf) -> None:
+    def send_commands(self) -> None:
         pass
 
     def get_facts(self, device) -> None:
@@ -221,7 +221,7 @@ def setup_logger(log_file: str = "dnac.log") -> logging.Logger:
 
     return logger
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     # Import default values from config
     from dnac_config import USER, PASSWORD, DNAC
 
