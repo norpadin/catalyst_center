@@ -16,18 +16,26 @@ from typing import Optional
 from io import StringIO
 import argparse
 
-
-logger: logging.Logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-file_handler = logging.FileHandler('dnac.log')
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-
+'''
+    _summary_
+    _version_number_ = "1.0.1"
+    _author_ = "npadin"
+    _description_ = "Métodos para interactuar con Cisco Catalyst Control Center vía APIs"
+    _copyright_ = "Copyright 2024, npadin"
+    _license_ = "MIT License"  
+    _status_ = "Development"
+    _changelog_ = " v1 versión inicial"
+    
+    Returns:
+        _type_: _description_
+        
+    Example usage:
+        python dnac_oop.py --prime-ip (ipv4 or fqdn) --username user --password pass
+        
+        python dnac_oop.py --prime-ip 10.1.100.10 --username admin --password P4ssw0rd
+    '''
+    
+    
 class TQDMStreamHandler(logging.StreamHandler):
     def __init__(self, stream=sys.stdout):
         super().__init__(stream)
@@ -45,20 +53,24 @@ class TQDMStreamHandler(logging.StreamHandler):
 
 class Dnac():
     def __init__(self,  dnac_ip, dnac_user, dnac_password) -> None:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.dnac_user = dnac_user
         self.dnac_password = dnac_password
-        self.base_url = f"https://{dnac_ip}"
+        self.dnac_ip: str = dnac_ip
+        self.base_url: str = f"https://{dnac_ip}"
         self.auth_url = r'/dna/system/api/v1/auth/token'
         self.devices = {}
         self.sites = []
         self.groups = []
         self.dev_groups = []
 
-    def __repr__(self) -> None:
-        pass
-
-    def __str__(self) -> None:
-        pass
+    def __repr__(self) -> str:
+        return (f"Dnac(dnac_ip='{self.dnac_ip}', "
+                f"dnac_user='{self.dnac_user}'")
+        
+    def __str__(self) -> str:
+        return (f"Cisco DNA Center at '{self.dnac_ip}'\n"
+                f"User: {self.dnac_user}\n")
 
     def get_token(self) -> str | None:
         try:
@@ -80,17 +92,17 @@ class Dnac():
             return None
 
     def get_all_devices(self) -> dict | None:
-        devices_url = r'/dna/intent/api/v1/network-device'
+        url:str = self.base_url + '/dna/intent/api/v1/network-device'
         try:
-            response = requests.get(
-                self.base_url + devices_url,
+            response: requests.Response = requests.get(
+                url,
                 headers={
                     'X-Auth-Token': self.get_token(),
                     'Content-type': 'application/json',
                 },
                 verify=False
             )
-            for device in response.json()['response']:
+            for device in tqdm(response.json()['response']):
                 self.devices.update({device['id']: [
                     device['hostname'], device['managementIpAddress'], device['platformId']]})
             return self.devices
@@ -99,12 +111,13 @@ class Dnac():
             return None
 
     def get_devices_by_platfom(self, type) -> list[str] | None:
-        self.devices_by_platform = []
-        self.type = type
-        self.query_string_params = {'platformId': self.type}
+        url: str = self.base_url + '/dna/intent/api/v1/network-device'
+        self.devices_by_platform: list = []
+        self.type: str = type
+        self.query_string_params: dict = {'platformId': self.type}
         try:
             response = requests.get(
-                self.base_url + self.devices_url,
+                url,
                 headers={
                     'X-Auth-Token': self.get_token(),
                     'Content-type': 'application/json',
@@ -122,7 +135,7 @@ class Dnac():
     def get_device_by_ip(self, device_ip) -> str | None:
         devices_url = r'/dna/intent/api/v1/network-device'
         try:
-            response = requests.get(
+            response: requests.Response = requests.get(
                 self.base_url + devices_url + f'/ip-address/{device_ip}',
                 headers={
                     'X-Auth-Token': self.get_token(),
@@ -140,7 +153,7 @@ class Dnac():
 
     def get_facts(self, device) -> None:
         self.device = device
-        payload = {
+        payload: dict = {
             'commands': [
                 'show ip int brief'
             ],
@@ -190,9 +203,9 @@ class Dnac():
         pass
 
 
-def setup_logger(log_file: str = "prime.log") -> logging.Logger:
+def setup_logger(log_file: str = "dnac.log") -> logging.Logger:
     if log_file is None:
-        log_file = f"prime_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+        log_file = f"dnac{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
 
     logger: logging.Logger = logging.getLogger('myLogger')
     logger.setLevel(logging.INFO)
@@ -247,6 +260,7 @@ def parse_args():
 def main() -> None:
     args: argparse.Namespace = parse_args()
     dnac = Dnac(args.dnac_ip, args.username, args.password)
+    print(dnac)
     print(f'Cantidad de dispositivos: {dnac.get_device_count()}')
     pprint.pp(dnac.get_all_devices())
     pprint.pp(dnac.get_devices_by_platfom('AIR-AP2802I-A-K9'))
