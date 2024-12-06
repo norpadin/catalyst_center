@@ -1,13 +1,11 @@
 import requests
 from requests.auth import HTTPBasicAuth
 import urllib3
-import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import pprint
 import json
-import os
 import sys
 from pathlib import Path
 import logging
@@ -18,7 +16,7 @@ import argparse
 
 '''
     _summary_
-    _version_number_ = "1.0.1"
+    _version_number_ = "1.0.4"
     _author_ = "npadin"
     _description_ = "Métodos para interactuar con Cisco Catalyst Control Center vía APIs"
     _copyright_ = "Copyright 2024, npadin"
@@ -51,26 +49,57 @@ class TQDMStreamHandler(logging.StreamHandler):
     def get_log_content(self):
         return self._capture_stream.getvalue()
 
-class Dnac():
-    def __init__(self,  dnac_ip, dnac_user, dnac_password) -> None:
+
+class Dnac:
+    def __init__(
+            self, dnac_ip: str, dnac_user: str, dnac_password: str) -> None:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        self._session = requests.Session()
+        self._session.headers.update({'content-type': 'application/json'})
         self.dnac_user: str = dnac_user
         self.dnac_password: str = dnac_password
         self.dnac_ip: str = dnac_ip
-        self.base_url: str = f"https://{dnac_ip}"
-        self.auth_url: str = r'/dna/system/api/v1/auth/token'
-        self.devices: dict = {}
-        self.sites: list = []
-        self.groups: list = []
-        self.dev_groups: list = []
-
+        self.base_url = f"https://{dnac_ip}"
+        self.auth_url = "/dna/system/api/v1/auth/token"
+        self._token: Optional[str] = None
+        self._token_expiry: Optional[datetime] = None
+        
     def __repr__(self) -> str:
         return (f"Dnac(dnac_ip='{self.dnac_ip}', "
                 f"dnac_user='{self.dnac_user}'")
-        
+
     def __str__(self) -> str:
         return (f"Cisco DNA Center at '{self.dnac_ip}'\n"
                 f"User: {self.dnac_user}\n")
+
+    def _refresh_token(self) -> None:
+        try:
+            response = self._session.post(
+                self.base_url + self.auth_url,
+                auth=HTTPBasicAuth(self.dnac_user, self.dnac_password),
+                verify=False
+            )
+            response.raise_for_status()
+            self._token = response.json().get("Token")
+            self._token_expiry = datetime.now() + timedelta(hours=1)  # Assume 1-hour validity
+            self._session.headers.update({"X-Auth-Token": self._token})
+            logger.info("Token refreshed successfully.")
+        except Exception as e:
+            logger.exception("Failed to refresh token.")
+
+    def _ensure_token(self) -> None:
+        if not self._token or (
+                self._token_expiry and datetime.now() >= self._token_expiry):
+            self._refresh_token()
+
+    def _request(
+            self, method: str, endpoint: str, **kwargs) -> requests.Response:
+        self._ensure_token()
+        url = self.base_url + endpoint
+        response = self._session.request(method, url, verify=False, **kwargs)
+        response.raise_for_status()
+        return response
+
 
     def get_token(self) -> str | None:
         try:
@@ -92,24 +121,27 @@ class Dnac():
             return None
 
     def get_all_devices(self) -> dict | None:
-        url:str = self.base_url + r'/dna/intent/api/v1/network-device'
+        endpoint = "/dna/intent/api/v1/network-device"
         try:
-            response: requests.Response = requests.get(
-                url,
-                headers={
-                    'X-Auth-Token': self.get_token(),
-                    'Content-type': 'application/json',
-                },
-                verify=False
-            )
-            for device in tqdm(response.json()['response']):
-                self.devices.update({device['id']: [
-                    device['hostname'], device['managementIpAddress'], device['platformId']]})
+            devices = {}
+            while endpoint:
+                response = self._request("GET", endpoint)
+                data = response.json()
+                for device in data.get('response', []):
+                    devices[device['id']] = [
+                        device['hostname'],
+                        device['managementIpAddress'],
+                        device['platformId']
+                    ]
+                endpoint = data.get('pagination', {}).get('next', None)
+            self.devices = devices
             return self.devices
         except Exception as e:
-            logger.error(f"Error getting device info: {e}")
+            logger.exception("Error getting all devices.")
             return None
 
+    
+    
     def get_devices_by_platfom(self, type) -> list[str] | None:
         url: str = self.base_url + r'/dna/intent/api/v1/network-device'
         self.devices_by_platform: list = []
@@ -129,7 +161,7 @@ class Dnac():
                 self.devices_by_platform.append(device['id'])
             return self.devices_by_platform
         except Exception as e:
-            logger.error(f"Error getting device info: {e}")
+            self.logger.error(f"Error getting device info: {e}")
             return None
 
     def get_device_by_ip(self, device_ip) -> str | None:
@@ -145,7 +177,7 @@ class Dnac():
             )
             return response.json()
         except Exception as e:
-            logger.error(f"Error getting device info: {e}")
+            self.logger.error(f"Error getting device info: {e}")
             return None
 
     def send_commands(self) -> None:
